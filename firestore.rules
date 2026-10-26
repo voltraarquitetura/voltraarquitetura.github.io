@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// Regras do banco do sistema da Voltra.
+// Só entra quem tem login E foi liberado pela gestão (documento em "acessos").
+// A gestão (dono e gestora) cuida de acessos, pessoas e configurações.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function caminhoAcesso() { return /databases/$(database)/documents/acessos/$(request.auth.uid); }
+    function membro() { return logado() && exists(caminhoAcesso()) && get(caminhoAcesso()).data.ativo == true; }
+    function gestao() { return membro() && get(caminhoAcesso()).data.gestao == true; }
+    function setupFeito() { return exists(/databases/$(database)/documents/config/setup); }
+
+    // Quem pode entrar no sistema
+    match /acessos/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || gestao());
+      // configuração inicial: o primeiro login vira administrador, uma única vez
+      allow create: if gestao()
+        || (logado() && request.auth.uid == uid && !setupFeito()
+            && existsAfter(/databases/$(database)/documents/config/setup)
+            && request.resource.data.gestao == true && request.resource.data.ativo == true);
+      allow update, delete: if gestao();
+    }
+
+    // Pedido de acesso de quem entrou com um login ainda não liberado
+    match /pedidos/{uid} {
+      allow create, update: if logado() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email', 'em']);
+      allow read: if logado() && (request.auth.uid == uid || gestao());
+      allow delete: if gestao();
+    }
+
+    // Marca da configuração inicial
+    match /config/setup {
+      allow get: if true;
+      allow create: if logado() && !setupFeito()
+        && getAfter(/databases/$(database)/documents/acessos/$(request.auth.uid)).data.gestao == true;
+    }
+
+    // Regras gerais do sistema (calendário, setores, modelos)
+    match /config/{id} {
+      allow read: if membro();
+      allow write: if gestao() && id != 'setup';
+    }
+
+    // Pessoas: todos leem; a equipe atualiza o dia a dia, mas só a gestão muda papel e login
+    match /pessoas/{pid} {
+      allow read: if membro();
+      allow create, delete: if gestao();
+      allow update: if gestao() || (membro()
+        && request.resource.data.get('papel', null) == resource.data.get('papel', null)
+        && request.resource.data.get('conta', null) == resource.data.get('conta', null));
+    }
+
+    // Estado pessoal (avisos lidos)
+    match /data/users/{uid}/{resto=**} {
+      allow read, write: if membro() && request.auth.uid == uid;
+    }
+
+    // Projetos, missões, entregas, avisos, comentários, históricos e travas
+    match /{colecao}/{id} {
+      allow read, write: if membro() && !(colecao in ['acessos', 'pedidos', 'config', 'pessoas', 'data']);
+    }
+  }
+}
