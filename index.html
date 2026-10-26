@@ -534,6 +534,14 @@ body.pdrag .ptabs .seg button.drop-on{outline:3px dashed var(--wood);outline-off
 .mini-est i{flex:1;height:7px;border-radius:3px;background:var(--line)}
 .mini-est i.ok{background:var(--ok)}
 .mini-est i.cur{background:#F2B33D}
+.mini-est i.pend{background:var(--warn)}
+.parqs{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.parqs li{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;background:var(--raise);padding:3px 4px 3px 8px;font-size:12.5px;max-width:100%}
+.parqs .fn{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.parqs .ext{font-size:10px}
+.parqs .xbtn{width:28px;height:28px}
+.parq-add{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.obs .parqs{margin-top:8px}
 .eg-card{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 .eg{display:grid;grid-template-columns:repeat(10,minmax(92px,1fr));gap:6px;overflow-x:auto}
 .eg-col{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:64px;min-width:0}
@@ -1233,8 +1241,8 @@ async function addFiles(mid,files){
     if(f.size>lim){setMsg('err',mid,`“${f.name}” tem ${fmtSize(f.size)}. O limite é ${pdf?'20 MB para PDF':'14 MB'}. Suba no Drive e use “Adicionar link do Drive”.`);render();continue;}
     S.uploading[mid]=(S.uploading[mid]||0)+1;setMsg('err',mid,null);render();
     try{
-      const res=pdf?await S.cap.assets.upload(f,{type:'application/pdf'}):await S.cap.assets.upload(new Blob([await b64(f)],{type:'text/plain'}),{type:'text/plain'});
-      const item={id:res.id,nome:f.name,ext,tamanho:f.size,enc:pdf?'raw':'b64',em:Date.now(),por:myPid()||'admin'};
+      const raw=pdf||!!S.cap.fb;const res=raw?await S.cap.assets.upload(f,{type:pdf?'application/pdf':(f.type||'application/octet-stream')}):await S.cap.assets.upload(new Blob([await b64(f)],{type:'text/plain'}),{type:'text/plain'});
+      const item={id:res.id,nome:f.name,ext,tamanho:f.size,enc:raw?'raw':'b64',em:Date.now(),por:myPid()||'admin'};
       await act(()=>withLock('a-'+mid,async()=>{const m=await getM(mid);if(!m)return;await D('missoes/'+mid).update({anexos:[...(m.anexos||[]),item]});}));
       setMsg('ok',mid,`“${f.name}” anexado.`);
     }catch(e){console.error(e);const c=e&&e.code;setMsg('err',mid,c==='too_large'?`“${f.name}” passou do limite de tamanho.`:c==='quota_or_state'?'O espaço de arquivos do sistema acabou. Avise o administrador.':c==='not_granted'||c==='capability_disabled'?'Envio de arquivos indisponível para o seu acesso.':`Não foi possível enviar “${f.name}”. Tente de novo.`);}
@@ -1595,7 +1603,7 @@ function projCard(pr,vend){const st=projSt(pr);
   const lm=!vend&&ehLider()?me():null,mt=lm?meuTrabalho(pr,lm):null;
   const av=mt?(mt.length?Math.round(mt.filter(x=>x.feito).length/mt.length*100):0):projAvanco(pr),nd=(pr.disciplinas||[]).length,ss=prSetores(pr);
   const ec=isEst(pr)?estAtual(pr):null,eci=etIdx(ec);
-  const meta=`${!vend&&isEst(pr)?`<span class="mini-est" role="img" aria-label="Etapa ${esc(ec?etNome(ec):'não posicionado')}">${ETAPAS.map((e,i)=>`<i class="${ec==='fim'||i<eci?'ok':i===eci?'cur':''}"></i>`).join('')}</span>`:`<span class="prog" role="img" aria-label="Avanço de ${av}%"><i style="width:${clamp(av,0,100)}%"></i></span>`}<span class="pnums"><span class="mono">${av}%</span>${mt?`<span>${esc(secNome(lm.setor))} ${mt.filter(x=>x.feito).length}/${mt.length}</span>`:''}${!vend&&isEst(pr)?`<span><strong>${ec?esc(ec==='fim'?'Concluído':etNum(ec)+' '+etNome(ec)):'Fora da esteira'}</strong></span>${ec&&ec!=='fim'&&prefInfo(pr,ec)&&prefInfo(pr,ec).st==='wait'?'<span class="flag">Aguardando prefeitura</span>':''}`:!vend&&!mt&&nd?`<span>${(pr.disciplinas||[]).filter(x=>x.feito).length}/${nd} disciplinas</span>`:''}${!vend&&!mt&&ss.length?`<span>${ss.length===SECTORS.length?'Todos os setores':ss.map(secNome).map(esc).join(', ')}</span>`:''}${pr.prazo?`<span>Entrega ${fmtDate(pr.prazo)}</span>`:'<span>Sem data de entrega</span>'}${!vend&&ehArq(pr)?`<span class="flag">Arquivado · ${esc(MOTIVOS_ARQ[pr.arquivado.motivo]||'')}</span>`:!vend&&ehFim(pr)?chip('verde','Finalizado'):!vend&&av>=100?chip('verde',mt?'Sua parte concluída':'Concluído'):!vend&&st?chip(st,{verde:'Em dia',laranja:'Atenção',vermelho:'Atrasado'}[st]):''}${!vend&&pr.impedimento?'<span class="flag">Impedimento externo</span>':''}${!vend&&pr.retro?'<span class="flag">Lançado já concluído</span>':''}</span>`;
+  const meta=`${!vend&&isEst(pr)?`<span class="mini-est" role="img" aria-label="Etapa ${esc(ec?etNome(ec):'não posicionado')}">${ETAPAS.map((e,i)=>`<i class="${ec==='fim'?'ok':i<eci?(pendEt(pr,e.k)?'pend':'ok'):i===eci?'cur':''}"></i>`).join('')}</span>`:`<span class="prog" role="img" aria-label="Avanço de ${av}%"><i style="width:${clamp(av,0,100)}%"></i></span>`}<span class="pnums"><span class="mono">${av}%</span>${mt?`<span>${esc(secNome(lm.setor))} ${mt.filter(x=>x.feito).length}/${mt.length}</span>`:''}${!vend&&isEst(pr)?`<span><strong>${ec?esc(ec==='fim'?'Concluído':etNum(ec)+' '+etNome(ec)):'Fora da esteira'}</strong></span>${ec&&ec!=='fim'&&prefInfo(pr,ec)&&prefInfo(pr,ec).st==='wait'?'<span class="flag">Aguardando prefeitura</span>':''}`:!vend&&!mt&&nd?`<span>${(pr.disciplinas||[]).filter(x=>x.feito).length}/${nd} disciplinas</span>`:''}${!vend&&!mt&&ss.length?`<span>${ss.length===SECTORS.length?'Todos os setores':ss.map(secNome).map(esc).join(', ')}</span>`:''}${pr.prazo?`<span>Entrega ${fmtDate(pr.prazo)}</span>`:'<span>Sem data de entrega</span>'}${!vend&&ehArq(pr)?`<span class="flag">Arquivado · ${esc(MOTIVOS_ARQ[pr.arquivado.motivo]||'')}</span>`:!vend&&ehFim(pr)?chip('verde','Finalizado'):!vend&&av>=100?chip('verde',mt?'Sua parte concluída':'Concluído'):!vend&&st?chip(st,{verde:'Em dia',laranja:'Atenção',vermelho:'Atrasado'}[st]):''}${!vend&&pr.impedimento?'<span class="flag">Impedimento externo</span>':''}${!vend&&pr.retro?'<span class="flag">Lançado já concluído</span>':''}</span>`;
   if(vend)return `<article class="pcard"><div class="ptog" style="cursor:default">${top}${meta}</div></article>`;
   const open=S.openProj===pr.id,g=canAdmin(),mo=g&&S.ui.pmenu===pr.id,id=esc(pr.id);
   const menu=g?`<button class="pmenu-b" data-act="pmenu" data-id="${id}" aria-haspopup="menu" aria-expanded="${mo}" aria-label="Mais ações: ${esc(pr.nome)}" title="Mais ações">⋯</button>${mo?pmenuHTML(pr):''}`:'';
@@ -1701,7 +1709,7 @@ function viewAjustes(){
     ${S.cap.fb?acessosCard():senhasCard()}
     ${dadosCard()}
     <section class="card"><form class="form" data-form="config" novalidate><h2>Regras do sistema</h2>
-      <p class="hint">${S.cap.fb?'Anexos: no site, entram como link do Drive (ou OneDrive, Dropbox).':'Anexos: qualquer formato, até 14 MB por arquivo (PDF até 20 MB). Arquivos maiores entram como link do Drive.'}</p>
+      <p class="hint">${S.cap.fb?'Anexos: qualquer formato, até 14 MB por arquivo (PDF até 20 MB), guardados no banco do Firebase. O plano gratuito tem 1 GB no total; arquivos maiores ou acima disso entram como link do Drive.':'Anexos: qualquer formato, até 14 MB por arquivo (PDF até 20 MB). Arquivos maiores entram como link do Drive.'}</p>
       <label for="cf-teto">Limite para trabalho fora da jornada (horas)<input id="cf-teto" type="number" min="1" max="12" value="${esc(dv('cf-teto',c.tetoForaHoras))}"></label>
       <p class="hint">Se alguém der Play fora do horário e esquecer de pausar, o cronômetro para sozinho depois desse tempo.</p>
       <label for="cf-tol">Tolerância para o Play (minutos)<input id="cf-tol" type="number" min="0" max="120" inputmode="numeric" value="${esc(dv('cf-tol',c.toleranciaPlay??10))}"></label>
@@ -1882,7 +1890,7 @@ function liberado(pr,id){const t=estT(pr),k=t.etp.get(id),cur=estAtual(pr);if(!c
   const ad=new Set((ES(pr).adiantados||[]).map(a=>a.id));let cid=id;for(let g=0;g<20&&cid;g++){if(ad.has(cid))return true;const x=t.by.get(cid);if(!x||x.etapa)break;cid=x.pai&&t.by.has(x.pai)?x.pai:'e-'+k;}return false;}
 const temAdiantado=(pr,k)=>(ES(pr).adiantados||[]).some(a=>estT(pr).etp.get(a.id)===k);
 function prefInfo(pr,k){if(!ETK[k]||!ETK[k].pref)return null;const p=((ES(pr).est||{})[k]||{}).pref||null;const cur=estAtual(pr);
-  if(p&&p.okEm)return{st:'ok',p};if(cur&&etIdx(k)<etIdx(cur))return{st:'ok',p:p||{},implicito:true};if(p&&p.enviadoEm)return{st:'wait',p};return{st:'need',p:null};}
+  if(p&&p.okEm)return{st:'ok',p};if(cur&&etIdx(k)<etIdx(cur)&&!pendEt(pr,k))return{st:'ok',p:p||{},implicito:true};if(p&&p.enviadoEm)return{st:'wait',p};return{st:'need',p:null};}
 function podePassar(pr){const k=estAtual(pr);if(!k)return{ok:false,m:'Posicione o projeto na esteira primeiro.'};if(k==='fim')return{ok:false,m:'Projeto concluído.'};
   const t=estT(pr);const falta=itensDaEtapa(pr,k).filter(x=>!t.ef(x.id)).length;
   if(falta)return{ok:false,m:`${falta===1?'Falta':'Faltam'} ${falta} ${plural(falta,'item','itens')} nesta etapa.`};
@@ -1911,8 +1919,11 @@ const pview=()=>{try{return localStorage.getItem('voltra-pview')||'esteira';}cat
 const estSel=pr=>(S.ui.estSel&&S.ui.estSel[pr.id])||(estAtual(pr)&&estAtual(pr)!=='fim'?estAtual(pr):'venda');
 const estLane=pr=>(S.ui.estLane&&S.ui.estLane[pr.id])||null;
 
+const pendEt=(pr,k)=>{const cur=estAtual(pr);if(!cur||cur==='fim'||etIdx(k)<0||etIdx(k)>=etIdx(cur))return false;const t=estT(pr);return itensDaEtapa(pr,k).some(i=>!t.ef(i.id));};
+const stVis=(pr,k,st)=>st==='done'&&pendEt(pr,k)?'pend':st;
 function estStatus(pr,k){const cur=estAtual(pr),i=etIdx(k),ci=etIdx(cur);if(!cur)return 'none';if(cur==='fim'||i<ci)return 'done';if(i===ci)return 'cur';return temAdiantado(pr,k)?'adi':'lock';}
-const ST_TXT={done:'Concluída',cur:'Etapa atual',lock:'Travada',adi:'Adiantada',none:''};
+const ST_TXT={done:'Concluída',pend:'Com pendência',cur:'Etapa atual',lock:'Travada',adi:'Adiantada',none:''};
+const stChip=st=>st==='done'?'verde':st==='cur'||st==='pend'?'laranja':'vaga';
 function estFoot(pr,k,st){const its=itensDaEtapa(pr,k),nd=its.filter(x=>x.feito).length;const pf=prefInfo(pr,k);
   const l=[];if(its.length)l.push(`<span class="mono">${nd}/${its.length}</span>`);
   if(st==='cur'){const v=podePassar(pr);l.push(`<span class="${v.ok?'ok-t':''}">${v.ok?'Pronta para passar':pf&&pf.st==='wait'&&!its.some(x=>!x.feito)?'Aguardando prefeitura':'Em andamento'}</span>`);}
@@ -1921,7 +1932,7 @@ function estFoot(pr,k,st){const its=itensDaEtapa(pr,k),nd=its.filter(x=>x.feito)
 function estStHTML(pr,e){const k=e.k,st=estStatus(pr,k),r=respDe(pr,k),sel=estSel(pr)===k;const pf=prefInfo(pr,k);
   return `<button class="est-st s-${st}${sel?' sel':''}${k==='orgao'?' is-orgao':''}" style="grid-column:${etIdx(e.k)+1}" data-act="est-sel" data-p="${esc(pr.id)}" data-k="${k}" aria-label="${esc(`${etNum(k)} ${e.n}. ${ST_TXT[st]||''}`)}">
     <span class="est-txt"><span class="est-top"><span class="est-n">${etNum(k)}</span>${pf?prefBadge(pf):''}${e.ret?'<span class="bdg ret">↩ retorno</span>':''}</span>
-      <strong class="est-nm">${etNomeHTML(k)}${st==='done'?' <span class="ok-t">✓</span>':''}</strong><small class="est-resp">${r?esc(curto(nomeDe(r))):'Responsável a definir'}</small>${(()=>{const q=nomesAtivos(missoesNos(pr,itensDaEtapa(pr,k).map(i=>i.id)));return q.length?`<small class="est-who${st==='lock'?' warn':''}">${st==='lock'?'⚠ ':''}Trabalhando: ${esc(q.join(', '))}</small>`:'';})()}</span>
+      <strong class="est-nm">${etNomeHTML(k)}${st==='done'&&!pendEt(pr,k)?' <span class="ok-t">✓</span>':st==='done'?' <span class="hold-t">!</span>':''}</strong><small class="est-resp">${r?esc(curto(nomeDe(r))):'Responsável a definir'}</small>${(()=>{const q=nomesAtivos(missoesNos(pr,itensDaEtapa(pr,k).map(i=>i.id)));return q.length?`<small class="est-who${st==='lock'?' warn':''}">${st==='lock'?'⚠ ':''}Trabalhando: ${esc(q.join(', '))}</small>`:'';})()}</span>
     <span class="est-wk">${(()=>{const p=estAtual(pr)==='fim'?1:e2pDe(pr,itensDaEtapa(pr,k),st);return k==='orgao'?TEMPLO_MINI(p):e2mini(E2P[k],p);})()}</span>
     <span class="est-on">${st==='cur'?CAIXA:''}</span>
     <span class="est-ft">${estFoot(pr,k,st)}</span></button>`;}
@@ -1952,6 +1963,26 @@ function estHistHTML(pr){const ev=(ES(pr).eventos||[]).slice().reverse();if(!ev.
     ${rets.length?`<p class="hint">Retornos por equipe: ${Object.entries(porSetor).map(([s,n])=>`${esc(secNome(s))} ${n}`).join(' · ')||'—'}</p>`:''}
     <ol class="ehl">${ev.map(v=>`<li class="${v.t==='retorno'?'ret':''}"><span>${esc(evTxt(pr,v))}</span><small>${esc(nomeDe(v.por))} · ${fmtWhen(v.em)}</small></li>`).join('')}</ol></div></details>`;}
 
+/* arquivos nas observações (item da esteira ou projeto) */
+async function enviarArq(f){const ext=(f.name.includes('.')?f.name.split('.').pop().toLowerCase():'').slice(0,8)||'arq',pdf=ext==='pdf',raw=pdf||!!S.cap.fb;
+  if(!f.size)throw Object.assign(new Error('vazio'),{code:'vazio'});if(f.size>(pdf?20:14)*MB)throw Object.assign(new Error('grande'),{code:'grande',pdf});
+  const res=raw?await S.cap.assets.upload(f,{type:pdf?'application/pdf':(f.type||'application/octet-stream')}):await S.cap.assets.upload(new Blob([await b64(f)],{type:'text/plain'}),{type:'text/plain'});
+  return{id:res.id,nome:f.name,ext,tamanho:f.size,enc:raw?'raw':'b64',em:Date.now(),por:myPid()||'admin'};}
+async function anexarProj(pid,did,files){if(!files.length)return;if(!S.cap.assets){toast('Envio de arquivos indisponível nesta visualização.');return;}
+  const key=pid+'|'+(did||'');S.ui.upP=S.ui.upP||{};S.ui.upP[key]=(S.ui.upP[key]||0)+files.length;render();const novos=[],erros=[];
+  for(const f of files){try{novos.push(await enviarArq(f));}catch(e){console.error(e);erros.push(e&&e.code==='grande'?`“${f.name}” passa de ${e.pdf?20:14} MB (suba no Drive e cole o link na observação)`:e&&e.code==='vazio'?`“${f.name}” está vazio`:`“${f.name}” não foi enviado`);}finally{S.ui.upP[key]--;render();}}
+  if(novos.length){if(did)await estUpd(pid,(pr,es,ds)=>{const x=ds.find(z=>z.id===did);if(!x)return false;x.arqs=[...(x.arqs||[]),...novos];return{msg:novos.length===1?'Arquivo anexado.':`${novos.length} arquivos anexados.`};});
+    else{const ok=await act(()=>withLock('pr-'+pid,async()=>{const sn=await D('projetos/'+pid).get();if(!sn.exists)return;await D('projetos/'+pid).update({arqs:[...(sn.data().arqs||[]),...novos]});}));if(ok)toast(novos.length===1?'Arquivo anexado.':`${novos.length} arquivos anexados.`);}}
+  if(erros.length)toast(erros.join('; ')+'.');}
+async function rmArqProj(pid,did,i){let it=null;
+  if(did)await estUpd(pid,(pr,es,ds)=>{const x=ds.find(z=>z.id===did);if(!x||!x.arqs||!x.arqs[i])return false;it=x.arqs[i];x.arqs=x.arqs.filter((_,j)=>j!==i);return{msg:'Arquivo removido.'};});
+  else await act(()=>withLock('pr-'+pid,async()=>{const sn=await D('projetos/'+pid).get();if(!sn.exists)return;const a=(sn.data().arqs||[]).slice();[it]=a.splice(i,1);await D('projetos/'+pid).update({arqs:a});toast('Arquivo removido.');}));
+  if(it&&it.id&&S.cap.assets){try{await S.cap.assets.delete(it.id);}catch(e){}}}
+function arqsHTML(list,pid,did,editable){const key=pid+'|'+(did||''),up=(S.ui.upP||{})[key]||0,arm=S.ui.parqArm;
+  const lis=(list||[]).map((a,i)=>`<li><span class="ext">${esc(a.ext||'arq')}</span><button class="linkbtn fn" data-act="parq-baixar" data-p="${esc(pid)}" data-d="${esc(did||'')}" data-i="${i}" title="Baixar ${esc(a.nome)}">${esc(a.nome)}</button><small>${fmtSize(a.tamanho||0)}</small>${editable?`<button class="xbtn" data-act="parq-rm" data-p="${esc(pid)}" data-d="${esc(did||'')}" data-i="${i}" aria-label="${arm===key+'|'+i?'Confirmar: remover':'Remover'} ${esc(a.nome)}" title="${arm===key+'|'+i?'Clique de novo para remover':'Remover'}">${arm===key+'|'+i?'✕?':I.trash}</button>`:''}</li>`).join('');
+  return (lis||up)?`<ul class="parqs">${lis}${up?`<li><span class="spin"></span>Enviando ${up} ${plural(up,'arquivo','arquivos')}…</li>`:''}</ul>`:'';}
+function arqAddHTML(pid,did){if(!S.cap.assets)return '';const id='pq-'+pid+'--'+(did||'p');
+  return `<input type="file" id="${esc(id)}" class="vh" multiple data-parq="${esc(pid+'|'+(did||''))}"><label class="btn sm ghost parq-add" for="${esc(id)}">${I.upload} Anexar arquivos</label><span class="hint">PDF, Excel, Word, DWG… até 14 MB cada (PDF até 20 MB)</span>`;}
 function itemRow(pr,x,opts){const t=estT(pr),d=t.depth.get(x.id)||0,cod=t.cod.get(x.id)||'',g=!checavel(x),done=g?t.ef(x.id):!!x.feito;
   const lib=g?(liberado(pr,x.id)||subarvore(pr,x.id).some(y=>liberado(pr,y.id))):liberado(pr,x.id),pode=podeMarcar(pr,x);
   const mm=me(),podeNota=!pr._preview&&(canAdmin()||(mm&&mm.papel==='lider'&&x.setor&&x.setor===mm.setor)||(mm&&respDe(pr,estT(pr).etp.get(x.id))===mm.id)),edN=S.ui.nota===pr.id+'|'+x.id,nid='nt-'+pr.id+'--'+x.id;const ms=Object.values(S.missoes).filter(m=>m.projeto===pr.id&&m.disciplina===x.id&&(OPEN.includes(m.status)||m.status==='entregue'));
@@ -1960,16 +1991,16 @@ function itemRow(pr,x,opts){const t=estT(pr),d=t.depth.get(x.id)||0,cod=t.cod.ge
     !x.feito&&x.cu&&x.cu.st?`ClickUp: ${x.cu.st.toLowerCase()}${x.cu.resp?' · '+x.cu.resp:''}${x.cu.prev?' · previsto '+fmtDate(x.cu.prev):''}`:'',x.retorno&&!x.feito?'↩ voltou: '+x.retorno.motivo:'',!lib?'travado até a etapa '+etNome(k):''].filter(Boolean).join(' · ');
   return `<li class="${g?'g ':''}${done?'ok ':''}${!lib?'lk ':''}${x.retorno&&!x.feito?'rt':''}" style="--d:${Math.max(0,d-(opts&&opts.base||1))}">
     ${g?`<span class="gi" aria-hidden="true">${done?'✓':'▸'}</span>`:`<input type="checkbox" data-act="est-item" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" ${x.feito?'checked':''} ${pode?'':'disabled'} aria-label="${esc(cod+' '+x.nome)}">`}
-    <span class="num mono">${esc(cod)}</span><span class="it"><strong>${esc(x.nome)}</strong>${info?`<small>${esc(info)}</small>`:''}${x.cu&&x.cu.obs?`<small class="cuobs" title="${esc(x.cu.obs)}">${esc(x.cu.obs.length>170?x.cu.obs.slice(0,169)+'…':x.cu.obs)}</small>`:''}${x.nota&&x.nota.t&&!edN?`<small class="nota">${esc(x.nota.t)}<span class="nota-by"> · ${esc(curto(nomeDe(x.nota.por)))}, ${fmtWhen(x.nota.em)}</span></small>`:''}
-      ${edN?`<form class="form nota-f" data-form="nota" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" novalidate><label class="vh" for="${esc(nid)}">Observação de ${esc(x.nome)}</label><textarea id="${esc(nid)}" rows="2" placeholder="Ex.: aguardando o arquitetônico aprovado">${esc(dv(nid,x.nota&&x.nota.t||''))}</textarea><div class="row"><button class="btn sm primary" type="submit">Salvar</button><button class="btn sm ghost" type="button" data-act="nota-off">Cancelar</button>${x.nota&&x.nota.t?`<button class="btn sm ghost" type="button" data-act="nota-rm" data-p="${esc(pr.id)}" data-d="${esc(x.id)}">Apagar</button>`:''}</div></form>`:''}</span>
-    ${podeNota&&!edN?`<button class="btn sm ghost nota-it" data-act="nota-on" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" aria-label="${esc((x.nota&&x.nota.t?'Editar observação de ':'Escrever observação em ')+x.nome)}">${x.nota&&x.nota.t?'Editar obs.':'Observação'}</button>`:''}${!lib?'<span class="lkic" aria-hidden="true">🔒</span>':''}</li>`;}
+    <span class="num mono">${esc(cod)}</span><span class="it"><strong>${esc(x.nome)}</strong>${info?`<small>${esc(info)}</small>`:''}${x.cu&&x.cu.obs?`<small class="cuobs" title="${esc(x.cu.obs)}">${esc(x.cu.obs.length>170?x.cu.obs.slice(0,169)+'…':x.cu.obs)}</small>`:''}${x.nota&&x.nota.t&&!edN?`<small class="nota">${esc(x.nota.t)}<span class="nota-by"> · ${esc(curto(nomeDe(x.nota.por)))}, ${fmtWhen(x.nota.em)}</span></small>`:''}${!pr._preview?arqsHTML(x.arqs,pr.id,x.id,edN&&podeNota):''}
+      ${edN?`<form class="form nota-f" data-form="nota" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" novalidate><label class="vh" for="${esc(nid)}">Observação de ${esc(x.nome)}</label><textarea id="${esc(nid)}" rows="2" placeholder="Ex.: aguardando o arquitetônico aprovado">${esc(dv(nid,x.nota&&x.nota.t||''))}</textarea><div class="row"><button class="btn sm primary" type="submit">Salvar</button><button class="btn sm ghost" type="button" data-act="nota-off">Cancelar</button>${x.nota&&x.nota.t?`<button class="btn sm ghost" type="button" data-act="nota-rm" data-p="${esc(pr.id)}" data-d="${esc(x.id)}">Apagar</button>`:''}</div><div class="row">${arqAddHTML(pr.id,x.id)}</div></form>`:''}</span>
+    ${podeNota&&!edN?`<button class="btn sm ghost nota-it" data-act="nota-on" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" aria-label="${esc((x.nota&&x.nota.t?'Editar observação de ':'Escrever observação em ')+x.nome)}">${x.nota&&x.nota.t||(x.arqs&&x.arqs.length)?'Editar obs.':'Observação'}</button>`:''}${!lib?'<span class="lkic" aria-hidden="true">🔒</span>':''}</li>`;}
 function itensListHTML(pr,ids,opts){return ids.length?`<ul class="eit">${ids.map(x=>itemRow(pr,x,opts)).join('')}</ul>`:'<p class="muted">Nenhum item nesta etapa.</p>';}
 
 function estPanelHTML(pr,k){const t=estT(pr),e=ETK[k],st=estStatus(pr,k),g=podeGerirEst()&&!pr._preview,cur=estAtual(pr),lane=k==='complementares'?estLane(pr):null;
   let its=t.order.filter(x=>!x.etapa&&t.etp.get(x.id)===k);
   if(lane!=null){const ln=lanesDe(pr).find(l=>l.s===lane);its=ln?ln.tops.flatMap(x=>[x,...subarvore(pr,x.id)]):[];}
   const r=respDe(pr,k),pf=prefInfo(pr,k),v=podePassar(pr),ESx=(ES(pr).est||{})[k]||{};
-  let h=`<section class="est-panel"><div class="ep-h"><div><p class="eyebrow">${etNum(k)} · ${esc(ST_TXT[st]||'')}</p><h3>${esc(e.n)}${lane!=null?' · '+esc(lane?secNome(lane):'Equipe a definir'):''}</h3><p class="hint">${esc(e.d)}</p></div>
+  let h=`<section class="est-panel"><div class="ep-h"><div><p class="eyebrow">${etNum(k)} · ${esc(ST_TXT[stVis(pr,k,st)]||'')}</p><h3>${esc(e.n)}${lane!=null?' · '+esc(lane?secNome(lane):'Equipe a definir'):''}</h3><p class="hint">${esc(e.d)}</p></div>
     ${g?`<label class="ep-resp" for="rs-${esc(pr.id)}--${k}">Responsável<select id="rs-${esc(pr.id)}--${k}" data-estresp="1">${respOpt(r)}</select></label>`:`<p class="ep-resp"><small>Responsável</small><br>${r?esc(nomeDe(r)):'A definir'}</p>`}</div>`;
   if(lane!=null)h+=`<button class="btn ghost sm" data-act="est-lane" data-p="${esc(pr.id)}" data-s="">Ver todas as equipes</button>`;
   if(ESx.entrouEm&&st==='cur')h+=`<p class="hint">Na etapa desde ${fmtWhen(ESx.entrouEm)}.</p>`;
@@ -2063,13 +2094,13 @@ function estLiderHTML(pr){const m=me(),s=m&&m.setor,t=estT(pr),cor=E2L[s]||E2L['
     const ids=e.k==='complementares'?us.flatMap(u=>[u.top,...subarvore(pr,u.top.id)]):us.flatMap(u=>u.its);
     const mob=e.k==='complementares'&&ln?`<div class="lane big lider-mob${ln.done?' l-done':''}" style="--lc:${cor}"><span class="lane-h">${e2mini(E2P[s]||E2P._,ln.nt?ln.nd/ln.nt:0)}<span><strong>Sua esteira · ${esc(secNome(s))}</strong><small>05 Complementares · ${esc(ST_TXT[st]||'')}</small></span><span class="lane-n mono">${ln.nd}/${ln.nt}</span></span>
       <span class="lane-belt">${ln.its.map(x=>`<i class="lb${x.feito?' ok':x.retorno?' ret':''}" title="${esc((t.cod.get(x.id)||'')+' '+x.nome)}"></i>`).join('')}</span></div>`:'';
-    blocks.push(`<section class="est-mine">${mob}<h4>${etNum(e.k)} ${esc(e.n)}${e.k==='complementares'&&s?' · '+esc(secNome(s)):''} <span class="chip s-${st==='done'?'verde':st==='cur'?'laranja':'vaga'} noi">${esc(ST_TXT[st]||'')}</span>${resp?' <span class="chip s-navy noi">Você é o responsável</span>':''}</h4>${itensListHTML(pr,ids,{base:e.k==='complementares'?2:1})}</section>`);}
+    blocks.push(`<section class="est-mine">${mob}<h4>${etNum(e.k)} ${esc(e.n)}${e.k==='complementares'&&s?' · '+esc(secNome(s)):''} <span class="chip s-${stChip(stVis(pr,e.k,st))} noi">${esc(ST_TXT[stVis(pr,e.k,st)]||'')}</span>${resp?' <span class="chip s-navy noi">Você é o responsável</span>':''}</h4>${itensListHTML(pr,ids,{base:e.k==='complementares'?2:1})}</section>`);}
   return `<div class="est2d-wrap">${estEquipeSVG(pr,m)}</div>`+(blocks.join('')||'<p class="muted">Sua mesa não tem itens neste projeto.</p>');}
 
 function estItensHTML(pr,setor){const t=estT(pr);
   return ETAPAS.map(e=>{let its=t.order.filter(x=>!x.etapa&&t.etp.get(x.id)===e.k);if(setor)its=its.filter(x=>x.setor===setor);if(setor&&!its.length)return '';
     const st=estStatus(pr,e.k),pf=prefInfo(pr,e.k);
-    return `<section class="est-sec s-${st}"><h4><span class="num mono">${etNum(e.k)}</span> ${esc(e.n)} ${st!=='none'?`<span class="chip s-${st==='done'?'verde':st==='cur'?'laranja':'vaga'} noi">${esc(ST_TXT[st])}</span>`:''}${pf?prefBadge(pf):''}</h4>${itensListHTML(pr,its,{})}</section>`;}).join('');}
+    return `<section class="est-sec s-${st}"><h4><span class="num mono">${etNum(e.k)}</span> ${esc(e.n)} ${st!=='none'?`<span class="chip s-${stChip(stVis(pr,e.k,st))} noi">${esc(ST_TXT[stVis(pr,e.k,st)])}</span>`:''}${pf?prefBadge(pf):''}</h4>${itensListHTML(pr,its,{})}</section>`;}).join('');}
 
 function obsProjHTML(pr,lider,m){const ed=S.ui.pobs===pr.id,real=S.projetos[pr.id];if(!real)return '';const notas=real.notasEq||{};
   const fmtN=n=>n&&n.t?`${esc(n.t).replace(/\n/g,'<br>')}<small class="nota-by">${esc(curto(nomeDe(n.por)))}, ${fmtWhen(n.em)}</small>`:'';
@@ -2077,8 +2108,8 @@ function obsProjHTML(pr,lider,m){const ed=S.ui.pobs===pr.id,real=S.projetos[pr.i
     return `<span class="obs"><small>Observações da ${esc(secNome(s))}</small>${ed?`<form class="form nota-f" data-form="eqobs" data-p="${esc(pr.id)}" novalidate><label class="vh" for="${esc(id)}">Observações da equipe</label><textarea id="${esc(id)}" rows="3" placeholder="Escreva o que a gestão precisa saber sobre a parte da sua equipe">${esc(dv(id,n&&n.t||''))}</textarea><div class="row"><button class="btn sm primary" type="submit">Salvar</button><button class="btn sm ghost" type="button" data-act="pobs-off">Cancelar</button></div></form>`
       :`${n&&n.t?fmtN(n):'<span class="muted">Nenhuma observação da equipe.</span>'}<button class="btn sm ghost nota-btn" data-act="pobs-on" data-id="${esc(pr.id)}">${n&&n.t?'Editar observação':'Escrever observação'}</button>`}</span>`;}
   const id='pob-'+pr.id,eqs=Object.entries(notas).filter(([s,n])=>n&&n.t);
-  return `<span class="obs"><small>Observações</small>${ed?`<form class="form nota-f" data-form="pobs" data-p="${esc(pr.id)}" novalidate><label class="vh" for="${esc(id)}">Observações do projeto</label><textarea id="${esc(id)}" rows="4">${esc(dv(id,real.observacao||''))}</textarea><div class="row"><button class="btn sm primary" type="submit">Salvar</button><button class="btn sm ghost" type="button" data-act="pobs-off">Cancelar</button></div></form>`
-    :`${real.observacao?esc(real.observacao).replace(/\n/g,'<br>'):'<span class="muted">Sem observações.</span>'}${canAdmin()?`<button class="btn sm ghost nota-btn" data-act="pobs-on" data-id="${esc(pr.id)}">${real.observacao?'Editar observação':'Escrever observação'}</button>`:''}`}
+  return `<span class="obs"><small>Observações</small>${ed?`<form class="form nota-f" data-form="pobs" data-p="${esc(pr.id)}" novalidate><label class="vh" for="${esc(id)}">Observações do projeto</label><textarea id="${esc(id)}" rows="4">${esc(dv(id,real.observacao||''))}</textarea><div class="row"><button class="btn sm primary" type="submit">Salvar</button><button class="btn sm ghost" type="button" data-act="pobs-off">Cancelar</button></div>${arqsHTML(real.arqs,pr.id,null,true)}<div class="row">${arqAddHTML(pr.id,null)}</div></form>`
+    :`${real.observacao?esc(real.observacao).replace(/\n/g,'<br>'):'<span class="muted">Sem observações.</span>'}${arqsHTML(real.arqs,pr.id,null,false)}${canAdmin()?`<button class="btn sm ghost nota-btn" data-act="pobs-on" data-id="${esc(pr.id)}">${real.observacao?'Editar observação':'Escrever observação'}</button>`:''}`}
     ${eqs.map(([s,n])=>`<span class="nota-eq"><strong>${esc(secNome(s))}:</strong> ${fmtN(n)}</span>`).join('')}</span>`;}
 function projExpEst(pr){const g=podeGerirEst(),m=me(),v=pview(),lider=!g&&m&&m.papel==='lider';const es=ES(pr);
   const d=pr.prazo?Math.round((dateMs(pr.prazo)-dayStart(Date.now()))/DAY):null;const rets=(es.eventos||[]).filter(x=>x.t==='retorno').length;
@@ -2170,6 +2201,7 @@ function e2rampa(bx,by,tx,ty,p,cor,sel,modo){const L=Math.hypot(tx-bx,ty-by),ang
   s+=`<path d="${e2slats(0,L,-h/2,h,8.5)}" stroke="${sel?e2mix(cor,'#FFFFFF',.62):E2C.slat}" stroke-width="1"/>`;
   const px=Math.max(13,Math.min(L-13,okL));s+=`<g transform="translate(${px.toFixed(1)} ${-h/2})">${e2caixa(0,0,modo,17,13)}</g></g>`;return s;}
 const e2ok=(x,y)=>`<g class="e2okb"><circle cx="${x}" cy="${y}" r="6.6" fill="${E2C.ok}"/><path d="M${x-3} ${y}l2.1 2.2 4-4.4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+const e2pend=(x,y)=>`<g class="e2pendb"><circle cx="${x}" cy="${y}" r="6.6" fill="${E2C.amb}"/><path d="M${x} ${y-3.4}v3.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="${x}" cy="${y+2.9}" r="1.05" fill="#fff"/></g>`;
 const e2lock=(x,y)=>`<g class="e2lk" transform="translate(${x} ${y})"><rect x="-4.6" y="-1" width="9.2" height="7.2" rx="1.6" fill="#E9EBEE" stroke="#9AA0A8" stroke-width="1.1"/><path d="M-2.6-1v-2.4a2.6 2.6 0 0 1 5.2 0V-1" fill="none" stroke="#9AA0A8" stroke-width="1.2"/></g>`;
 const e2arr=(pts,on,mid)=>`<path class="e2ret${on?' on':''}" d="M${pts.map(p=>p.join(' ')).join(' L')}" marker-end="url(#${mid})"/>`;
 function e2prefPill(pf){if(!pf)return null;if(pf.st==='ok')return pf.p&&pf.p.okEm&&!pf.p.email?['OK · E-MAIL?','wait']:['✓ OK','ok'];return pf.st==='wait'?['AGUARDANDO','wait']:['PRECISA OK','need'];}
@@ -2206,8 +2238,8 @@ function est2dSVG(pr){const t=estT(pr),cur=estAtual(pr),sel=estSel(pr),selLane=e
     const quem=nomesAtivos(missoesNos(pr,its.map(i=>i.id)));
     if(quem.length){const ql=st==='lock'?['⚠ '+(e2wrap(quem.join(', '),15)[0]||''),'etapa travada']:e2wrap(quem.join(', '),17).slice(0,2);g+=e2t(x,y+13,ql,11.5,st==='lock'?'e2who warn':'e2who');}
     g+=e2pessoa(E2P[k],p,x,by+1,0.95);
-    if(st==='done'||(cur==='fim'))g+=e2ok(x+14,by-46);else if(st==='lock')g+=e2lock(x+15,by-48);
-    g+=e2caixa(x+40,by+1,st==='cur'?'cur':(st==='done'||cur==='fim'||(its.length&&p>=1))?'done':'todo');
+    const pend=pendEt(pr,k);if((st==='done'&&!pend)||(cur==='fim'))g+=e2ok(x+14,by-46);else if(pend)g+=e2pend(x+14,by-46);else if(st==='lock')g+=e2lock(x+15,by-48);
+    g+=e2caixa(x+40,by+1,st==='cur'?'cur':((st==='done'&&!pend)||cur==='fim'||(its.length&&p>=1))?'done':'todo');
     P.push(`<g class="e2st s-${st}${sel===k?' sel':''}" data-act="est-sel" data-p="${pid}" data-k="${k}" tabindex="0" role="button" aria-label="${esc(`${etNum(k)} ${e.n}. ${ST_TXT[st]||''}. ${nd} de ${its.length} itens`)}">${g}</g>`);}
   // complementares
   {const k='complementares',st=estStatus(pr,k),ln=lanesDe(pr),n=Math.max(1,ln.length),ntA=ln.reduce((a,l)=>a+l.nt,0),ndA=ln.reduce((a,l)=>a+l.nd,0),pC=ntA?ndA/ntA:(st==='done'?1:0);
@@ -2215,7 +2247,7 @@ function est2dSVG(pr){const t=estT(pr),cur=estAtual(pr),sel=estSel(pr),selLane=e
     let g=`<rect class="e2hit" x="450" y="140" width="${E2.juncX-14-450}" height="${by-6-140}" rx="14"/><text class="e2eye c" x="${E2.compX}" y="174" text-anchor="middle">${etNum(k)} · EM PARALELO</text><text class="e2big" x="${E2.compX}" y="200" text-anchor="middle">Complementares</text>`
       +e2t(E2.compX,220,e2wrap('Com o arquitetônico aprovado, uma esteira menor por equipe trabalha em paralelo. Elas entram juntas na compatibilização.',62),13,'e2desc')
       +`<text class="e2resp" x="${E2.compX}" y="256" text-anchor="middle">${ln.length?`${prontas} de ${ln.length} ${plural(ln.length,'equipe pronta','equipes prontas')} · ${ndA}/${ntA} itens`:'Nenhuma disciplina complementar'}</text>`;
-    if(st==='done'||cur==='fim')g+=e2ok(E2.juncX,by-30);else if(st==='lock')g+=e2lock(E2.juncX,by-32);
+    if((st==='done'&&!pendEt(pr,k))||cur==='fim')g+=e2ok(E2.juncX,by-30);else if(st==='done')g+=e2pend(E2.juncX,by-30);else if(st==='lock')g+=e2lock(E2.juncX,by-32);
     g+=e2caixa(E2.juncX,by+1,st==='cur'?'cur':(st==='done'||cur==='fim')?'done':'todo');
     P.push(`<g class="e2st e2comp s-${st}${sel===k&&!selLane?' sel':''}" data-act="est-sel" data-p="${pid}" data-k="${k}" tabindex="0" role="button" aria-label="${etNum(k)} Complementares. ${esc(ST_TXT[st]||'')}. ${ndA} de ${ntA} itens">${g}</g>`);
     const S=n<=3?130:n===4?114:Math.floor(460/n);const BACK=[];
@@ -2496,6 +2528,7 @@ let tt=0;function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.etpl&&S.ui.etpl){const it=S.ui.etpl.find(x=>x.id===t.dataset.etpl);if(it)it[t.dataset.f]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.f!=='nome')S.lastHtml=null;return;}if(t.dataset&&t.dataset.tpl&&S.ui.tpl){const it=S.ui.tpl.find(x=>x.id===t.dataset.tpl);if(it)it[t.dataset.f]=t.value;}if(!t.id||t.type==='file')return;S.drafts[t.id]=t.type==='checkbox'?t.checked:t.value;if(t.id==='as-tit'){clearTimeout(S._sugT);S._sugT=setTimeout(scheduleRender,450);}if(t.id==='pj-busca'){clearTimeout(S._bT);S._bT=setTimeout(scheduleRender,220);}const f=t.form;if(f){const er=f.querySelector('.ferr');if(er)er.remove();}if(t.id==='quem-q')scheduleRender();});
 document.addEventListener('change',e=>{const t=e.target;
   if(t.id==='dados-arq'){lerDados(t.files&&t.files[0]);t.value='';return;}
+  if(t.dataset&&t.dataset.parq){const[pid,did]=t.dataset.parq.split('|');const fl=[...(t.files||[])];t.value='';anexarProj(pid,did||null,fl);return;}
   if(t.type==='file')return;
   if(t.id)S.drafts[t.id]=t.type==='checkbox'?t.checked:t.value;
   if(t.id==='as-proj'){delete S.drafts['as-disc'];render();return;}
@@ -2712,6 +2745,8 @@ document.addEventListener('click',async e=>{
     case 'proj-desarq':{const ok=await act(()=>D('projetos/'+b.dataset.id).update({arquivado:null,atualizadoEm:Date.now()}));if(ok){S.openProj=null;toast('Projeto desarquivado: voltou para “Projetos”.');}break;}
     case 'nota-on':S.ui.nota=b.dataset.p+'|'+b.dataset.d;render();{const el=document.getElementById('nt-'+b.dataset.p+'--'+b.dataset.d);if(el)el.focus();}break;
     case 'nota-off':S.ui.nota=null;render();break;
+    case 'parq-baixar':{const pr=S.projetos[b.dataset.p];if(!pr)break;const did=b.dataset.d;const list=did?((pr.disciplinas||[]).find(z=>z.id===did)||{}).arqs:pr.arqs;const it=list&&list[+b.dataset.i];if(it)baixar(it);break;}
+    case 'parq-rm':{const key=b.dataset.p+'|'+(b.dataset.d||'')+'|'+b.dataset.i;if(S.ui.parqArm!==key){S.ui.parqArm=key;render();break;}S.ui.parqArm=null;await rmArqProj(b.dataset.p,b.dataset.d||null,+b.dataset.i);break;}
     case 'nota-rm':{const pid=b.dataset.p,did=b.dataset.d;const r=await estUpd(pid,(pr,es,ds)=>{const x=ds.find(z=>z.id===did);if(!x)return false;delete x.nota;return{msg:'Observação apagada.'};});if(r){S.ui.nota=null;delete S.drafts['nt-'+pid+'--'+did];render();}break;}
     case 'pobs-on':S.ui.pobs=b.dataset.id;render();break;
     case 'pobs-off':S.ui.pobs=null;render();break;
@@ -2813,7 +2848,7 @@ import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
   createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, collection,
-  getDoc, getDocs, setDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, runTransaction, writeBatch } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+  getDoc, getDocs, setDoc, deleteDoc, addDoc, onSnapshot, query, where, orderBy, limit, runTransaction, writeBatch, Bytes } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const CFG = {
   apiKey: 'AIzaSyAlqBwWHXnhHbD_hcL2K9ihgqaOBBYbehI',
@@ -2924,6 +2959,54 @@ function colRef(path, filtros = [], ord = null, lim = null) {
   };
 }
 const db = { doc: docRef, collection: p => colRef(p) };
+
+/* ---------- arquivos: guardados no próprio banco, em pedaços (o plano gratuito não tem Storage) ---------- */
+const PARTE = 700 * 1024;
+let quem = null;
+const assets = {
+  async upload(blob, o) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const id = doc(collection(fs, 'arquivos')).id, n = Math.max(1, Math.ceil(buf.length / PARTE));
+    try {
+      for (let i = 0; i < n; i += 8) {
+        const b = writeBatch(fs);
+        for (let j = i; j < Math.min(n, i + 8); j++) b.set(doc(fs, 'partes', id + '-' + j), { arq: id, i: j, d: Bytes.fromUint8Array(buf.subarray(j * PARTE, (j + 1) * PARTE)) });
+        await b.commit();
+      }
+      const tipo = (o && o.type) || blob.type || 'application/octet-stream';
+      await setDoc(doc(fs, 'arquivos', id), { tipo, tam: buf.length, partes: n, em: Date.now(), por: quem });
+      return { id, url: '/_blob/' + id, sizeBytes: buf.length, contentType: tipo };
+    } catch (e) { throw erro(e); }
+  },
+  async delete(id) {
+    try {
+      const m = await getDoc(doc(fs, 'arquivos', id)); const n = m.exists() ? m.data().partes || 0 : 0;
+      for (let i = 0; i < n; i += 400) { const b = writeBatch(fs); for (let j = i; j < Math.min(n, i + 400); j++) b.delete(doc(fs, 'partes', id + '-' + j)); await b.commit(); }
+      await deleteDoc(doc(fs, 'arquivos', id)); return { deleted: true };
+    } catch (e) { return { deleted: false }; }
+  },
+  async list() { return { assets: [], usage: {} }; }
+};
+async function lerArquivo(id) {
+  const m = await getDoc(doc(fs, 'arquivos', id)); if (!m.exists()) return null;
+  const { partes, tipo } = m.data();
+  const ps = await Promise.all(Array.from({ length: partes }, (_, i) => getDoc(doc(fs, 'partes', id + '-' + i))));
+  return new Blob(ps.map(p => p.data().d.toUint8Array()), { type: tipo || 'application/octet-stream' });
+}
+// o sistema baixa os anexos por "/_blob/<id>": aqui esse endereço é montado a partir do banco
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = async (u, o) => {
+  const m = String((u && u.url) || u).match(/\/_blob\/([A-Za-z0-9_-]+)$/);
+  if (!m) return fetchOriginal(u, o);
+  try { const b = await lerArquivo(m[1]); return b ? new Response(b) : new Response('', { status: 404 }); }
+  catch (e) { console.warn('arquivo', e); return new Response('', { status: 500 }); }
+};
+const downloads = {
+  async save({ filename, data }) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data])); a.download = filename || 'arquivo';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); return { status: 'saved' };
+  }
+};
 
 /* ---------- tela de entrada ---------- */
 const gate = document.getElementById('fbgate'), corpo = document.getElementById('fbg-body');
@@ -3105,7 +3188,8 @@ async function iniciar(u, acesso) {
   window.claude.fb = apiPara(u, gestao);
   iniciado = true;
   gate.hidden = true; corpo.innerHTML = '';
-  window.__fbPronto({ db, user, assets: null, downloads: null });
+  quem = u.uid;
+  window.__fbPronto({ db, user, assets, downloads });
 }
 
 onAuthStateChanged(auth, async u => {
