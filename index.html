@@ -221,6 +221,7 @@ details.fold>.in{padding:0 14px 14px}
 .fn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ext{font-family:var(--font-mono);font-size:11px;font-weight:600;padding:2px 6px;border-radius:5px;background:var(--wood-soft);color:var(--wood-ink);flex:none;text-transform:uppercase}
 .files small{color:var(--muted);font-size:12px;flex:none}
+.lote-rel ul{margin:0;padding:6px 0 4px 18px;display:grid;gap:6px;font-size:13px;max-height:360px;overflow:auto}.lote-rel li{overflow-wrap:anywhere}
 .drop{display:flex;align-items:center;gap:12px;border:1.5px dashed var(--wall);border-radius:12px;padding:14px;cursor:pointer;background:var(--raise)}
 .drop span{display:flex;flex-direction:column;gap:2px}
 .drop small{color:var(--muted);font-size:12.5px}
@@ -1665,9 +1666,10 @@ function acessosCard(){if(!canAdmin())return '';const A=S.fbAcessos||{},ped=(S.f
   <p class="hint">Sem acesso: ${ps.filter(p=>!acDe(p)).map(p=>esc(first(p.nome))).join(', ')||'ninguém'}.</p></div></section>`;}
 function dadosCard(){if(!canAdmin())return '';const st=S.ui.dados||{};
   return `<section class="card blk"><h2>Cópia dos dados</h2><p class="hint">Baixa um arquivo com projetos, pessoas, missões e históricos. Serve de cópia de segurança${S.cap.fb?'':' e para levar os dados para o site da Voltra'}.</p><div class="row"><button class="btn" data-act="dados-exp" ${st.exp?'disabled':''}>${st.exp?'Preparando…':'Baixar cópia dos dados'}</button></div>
-  ${S.cap.fb?`<div class="blk"><h3>Trazer dados de uma cópia</h3><p class="hint">Escolha o arquivo baixado no sistema do Claude ou de uma cópia anterior. O que estiver no arquivo substitui o que for igual aqui; o resto fica como está. Os logins já ligados às pessoas são mantidos.</p>
+  <div class="blk"><h3>${S.cap.fb?'Trazer dados ou uma atualização':'Aplicar uma atualização'}</h3><p class="hint">${S.cap.fb?'Escolha uma cópia baixada (o que estiver nela substitui o que for igual aqui; logins ligados às pessoas são mantidos) ou um arquivo de atualização preparado pelo Claude, como o das telas do ClickUp.':'Escolha um arquivo de atualização preparado pelo Claude, como o das telas do ClickUp.'}</p>
    <input type="file" id="dados-arq" class="vh" accept=".json,application/json"><label class="drop" for="dados-arq">${I.upload}<span><strong>Escolher arquivo .json</strong><small>${st.nome?esc(st.nome):'Nenhum arquivo escolhido'}</small></span></label>
-   ${st.resumo?`<p class="note">${I.amp}<span>${esc(st.resumo)}</span></p><div class="row"><button class="btn primary" data-act="dados-imp" ${st.imp?'disabled':''}>${st.imp?'Importando… '+esc(st.prog||''):'Confirmar importação'}</button>${st.imp?'':'<button class="btn ghost" data-act="dados-cancel">Cancelar</button>'}</div>`:''}${st.erro?`<p class="msg err">${esc(st.erro)}</p>`:''}${st.ok?`<p class="msg ok">${esc(st.ok)}</p>`:''}</div>`:''}</section>`;}
+   ${st.resumo?`<p class="note">${I.amp}<span>${esc(st.resumo)}</span></p><div class="row"><button class="btn primary" data-act="${st.lote?'dados-lote':'dados-imp'}" ${st.imp?'disabled':''}>${st.imp?(st.lote?'Aplicando… ':'Importando… ')+esc(st.prog||''):st.lote?'Aplicar atualização':'Confirmar importação'}</button>${st.imp?'':'<button class="btn ghost" data-act="dados-cancel">Cancelar</button>'}</div>`:''}${st.erro?`<p class="msg err">${esc(st.erro)}</p>`:''}${st.ok?`<p class="msg ok">${esc(st.ok)}</p>`:''}
+   ${st.relat&&st.relat.length?`<details class="fold lote-rel" open><summary>O que mudou em cada projeto (${st.relat.length})</summary><ul class="in">${st.relat.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></details>`:''}</div></section>`;}
 const COLS_DADOS=['pessoas','projetos','missoes','entregas','conclusoes','avisos','comentarios','atrasos','config'];
 const NOME_COL={pessoas:'pessoas',projetos:'projetos',missoes:'missões',entregas:'entregas',conclusoes:'conclusões',avisos:'avisos',comentarios:'comentários',atrasos:'atrasos',config:'configurações'};
 async function exportarDados(){if(!S.cap.db)return;S.ui.dados={...(S.ui.dados||{}),exp:true};render();
@@ -1681,7 +1683,11 @@ async function exportarDados(){if(!S.cap.db)return;S.ui.dados={...(S.ui.dados||{
   }catch(e){console.error(e);toast('Não foi possível baixar a cópia agora.');}
   finally{S.ui.dados={...(S.ui.dados||{}),exp:false};render();}}
 async function lerDados(f){if(!f)return;S.ui.dados={nome:f.name};
-  try{const j=JSON.parse(await f.text());if(!j||j.sistema!=='voltra'||!j.colecoes||typeof j.colecoes!=='object')throw new Error('formato');
+  try{const j=JSON.parse(await f.text());
+    if(j&&j.sistema==='voltra'&&j.tipo==='lote'&&Array.isArray(j.projetos)){const nv=j.projetos.filter(p=>p.criar).length;
+      S.ui.dados={nome:f.name,lote:j,resumo:`Atualização pelas ${j.titulo||'telas do ClickUp'}: ${j.projetos.length-nv} ${plural(j.projetos.length-nv,'projeto existente','projetos existentes')} e ${nv} ${plural(nv,'projeto novo','projetos novos')}. Só muda o que veio do ClickUp: o que a equipe ticou no sistema continua ticado, e nada é apagado se tiver observação, arquivo ou missão.`};render();return;}
+    if(!S.cap.fb){S.ui.dados={nome:f.name,erro:'Cópia completa dos dados só pode ser trazida no site da Voltra.'};render();return;}
+    if(!j||j.sistema!=='voltra'||!j.colecoes||typeof j.colecoes!=='object')throw new Error('formato');
     const partes=COLS_DADOS.filter(c=>j.colecoes[c]&&Object.keys(j.colecoes[c]).length).map(c=>`${Object.keys(j.colecoes[c]).length} ${NOME_COL[c]}`);
     if(!partes.length)throw new Error('vazio');
     S.ui.dados={nome:f.name,j,resumo:`Arquivo de ${fmtDate(isoDate(j.exportadoEm||Date.now()))}: ${partes.join(', ')}.`};
@@ -1690,6 +1696,44 @@ async function lerDados(f){if(!f)return;S.ui.dados={nome:f.name};
 async function importarDados(){const st=S.ui.dados;if(!st||!st.j||!S.cap.fb)return;st.imp=true;st.prog='';render();
   try{const n=await S.cap.fb.importar(st.j.colecoes,k=>{st.prog=k+' itens';scheduleRender();});S.ui.dados={ok:`Pronto: ${n} itens importados.`};}
   catch(e){console.error(e);S.ui.dados={...st,imp:false,erro:S.cap.fb.msg(e)};}
+  render();}
+function reposicionarDoc(es,alvo,now,por,obs,t){const ci=etIdx(alvo);es.est=es.est||{};
+  ETAPAS.forEach((e,i)=>{const o=es.est[e.k]||{};if(i<ci){if(!o.passouEm)es.est[e.k]={...o,passouEm:now,passouPor:por,posicionado:true};}else if(i===ci)es.est[e.k]={...o,entrouEm:now,passouEm:null};else es.est[e.k]={...o,passouEm:null};});
+  es.estacao=alvo;es.adiantados=(es.adiantados||[]).filter(a=>etIdx(t.etp.get(a.id))>ci);
+  es.eventos=[...(es.eventos||[]),{t:'posicionou',para:alvo,origem:es.origem||'existente',obs:'Atualizado pelas '+obs,por,em:now}];}
+async function aplicarLoteProj(p,j,now,por){return await withLock('pr-'+p.id,async()=>{const ref=D('projetos/'+p.id);const sn=await ref.get();
+  if(!sn.exists){if(!p.criar)return {tipo:'falta',txt:`${p.nome}: não está no sistema (pulado)`};await ref.set(p.criar);return {tipo:'novo',txt:`${p.nome}: criado${p.criar.arquivado?' em Arquivados (standby)':''}`};}
+  if(!p.ops||!p.ops.length)return {tipo:'igual',txt:`${p.nome}: já estava no sistema`};
+  const doc=JSON.parse(JSON.stringify(sn.data()));const ds=doc.disciplinas=doc.disciplinas||[];const es=doc.esteira=doc.esteira||{};const mud=[],obs=[];const by=id=>ds.find(x=>x.id===id);
+  for(const o of p.ops){
+    if(o.t==='item'){const x=by(o.id);if(!x)continue;
+      const vaiTicar=(o.feito===true&&!x.feito)||(o.feito===false&&x.feito&&x.feitoVia==='clickup');
+      if(o.st){const c={...(x.cu||{})};if(c.st!==o.st){if(!vaiTicar&&!x.feito)mud.push(`${x.nome}: ${o.st.toLowerCase()}`);c.st=o.st;}if(o.titulo&&!c.titulo)c.titulo=o.titulo;x.cu=c;}
+      if(o.feito===true&&!x.feito){x.feito=true;x.feitoEm=now;x.feitoPor=por;x.feitoVia='clickup';mud.push('✓ '+x.nome);}
+      else if(o.feito===false&&x.feito){if(x.feitoVia==='clickup'){x.feito=false;x.feitoEm=null;x.feitoPor=null;delete x.feitoVia;mud.push('○ '+x.nome+' (voltou para a fazer)');}else obs.push(x.nome+' continua ticado (marcado pela equipe)');}}
+    else if(o.t==='novo'){if(!o.item||by(o.item.id))continue;const it=JSON.parse(JSON.stringify(o.item));if(it.feito){it.feitoEm=now;it.feitoPor=por;}if(it.pai&&!it.pai.startsWith('e-')&&!by(it.pai))it.pai='e-complementares';ds.push(it);mud.push('+ '+it.nome);}
+    else if(o.t==='del'){const x=by(o.id);if(!x)continue;
+      if(x.feito||(x.nota&&x.nota.t)||(x.arqs&&x.arqs.length)||ds.some(y=>y.pai===x.id)||Object.values(S.missoes).some(m=>m.projeto===p.id&&m.disciplina===x.id)){obs.push(x.nome+' ficou (tem tique, observação, arquivo ou missão)');continue;}
+      ds.splice(ds.indexOf(x),1);es.adiantados=(es.adiantados||[]).filter(a=>a.id!==x.id);mud.push('− '+x.nome);}
+    else if(o.t==='obs'){if(o.v&&!(doc.observacao||'').includes(o.v)){doc.observacao=o.v+(doc.observacao?'\n\n'+doc.observacao:'');mud.push('observação');}}
+    else if(o.t==='imped'){if(doc.impedimento!==o.v){doc.impedimento=o.v;mud.push('impedimento: '+o.v);}}
+    else if(o.t==='prazo'){if(!doc.prazo&&o.v){doc.prazo=o.v;mud.push('entrega '+fmtDate(o.v));}}
+    else if(o.t==='avancar'){const cur=es.estacao||null;if(cur==='fim')continue;const t=estT({disciplinas:ds});let alvo=null;
+      for(const e of ETAPAS.slice(Math.max(0,etIdx(cur)))){if(t.order.some(x=>checavel(x)&&t.etp.get(x.id)===e.k&&!t.ef(x.id))){alvo=e.k;break;}}
+      alvo=alvo||'orgao';if(etIdx(alvo)>etIdx(cur)){reposicionarDoc(es,alvo,now,por,j.titulo||'telas do ClickUp',t);mud.push('etapa → '+etNome(alvo));}}
+    else if(o.t==='arquivar'){if(!doc.arquivado&&!ehFim(doc)){doc.arquivado={motivo:o.motivo||'limbo',obs:o.obs||null,em:now,por};doc.foco=false;mud.push('foi para Arquivados');}}
+    else if(o.t==='finalizar'){if(!doc.finalizado){doc.finalizado={data:isoDate(now),em:now,por,obs:o.obs||null};doc.foco=false;mud.push('finalizado');}}}
+  if(!mud.length)return {tipo:'igual',txt:`${p.nome}: nada a mudar${obs.length?' · '+obs.join(' · '):''}`};
+  es.eventos=[...(es.eventos||[]),{t:'lote',obs:j.titulo||'telas do ClickUp',n:mud.length,por,em:now}].slice(-300);
+  const ss=SECTORS.map(x=>x.id).filter(id=>(doc.setores||[]).includes(id)||ds.some(x=>x.setor===id));doc.setores=ss;if(!doc.setor||!ss.includes(doc.setor))doc.setor=ss[0]||null;
+  doc.disciplinas=renumerar(ds);doc.atualizadoEm=now;await ref.set(doc);
+  return {tipo:'atual',txt:`${p.nome}: ${mud.join(' · ')}${obs.length?' · '+obs.join(' · '):''}`};});}
+async function aplicarLote(){const st=S.ui.dados;if(!st||!st.lote||!S.cap.db)return;if(S.readOnly){toast('Seu acesso é só de leitura.');return;}
+  const j=st.lote;st.imp=true;st.prog='';render();const now=Date.now(),por=myPid()||'admin';const n={novo:0,atual:0,igual:0,falta:0},linhas=[];let i=0;
+  try{for(const p of j.projetos){i++;st.prog=`${i} de ${j.projetos.length}`;scheduleRender();const r=await aplicarLoteProj(p,j,now,por);
+      if(!r){linhas.push(`${p.nome}: não foi possível agora (outra ação em andamento)`);continue;}n[r.tipo]++;linhas.push(r.txt);}
+    S.ui.dados={ok:`Pronto: ${n.atual} ${plural(n.atual,'projeto atualizado','projetos atualizados')}, ${n.novo} ${plural(n.novo,'novo','novos')}${n.igual?`, ${n.igual} sem mudança`:''}${n.falta?`, ${n.falta} não encontrados`:''}.`,relat:linhas};}
+  catch(e){console.error(e);S.ui.dados={...st,imp:false,erro:'A atualização parou no meio ('+i+' de '+j.projetos.length+'). Pode escolher o arquivo de novo e aplicar: o que já foi feito não se repete.',relat:linhas};}
   render();}
 function viewAjustes(){
   const contas=Object.values(S.pessoas).filter(p=>p.conta).map(p=>p.conta);if(S.cap.user&&contas.length)resolveProfiles(contas);
@@ -1955,6 +1999,7 @@ function evTxt(pr,v){const n=k=>etNome(k);const it=ids=>(ids||[]).map(id=>{const
   case 'retorno':return `↩ Guindaste: voltou de ${n(v.de)} para ${n(v.para)}. Motivo: ${v.motivo}${v.itens&&v.itens.length?` · Itens: ${it(v.itens)}`:''}`;
   case 'pref_env':return `Enviado à prefeitura (${n(v.k)})`;case 'pref_ok':return `OK da prefeitura em ${n(v.k)}${v.data?' ('+fmtDate(v.data)+')':''}${v.email?' · formalizado por e-mail':' · falta formalizar por e-mail'}${v.obs?': '+v.obs:''}`;
   case 'pref_mail':return `OK da prefeitura em ${n(v.k)} formalizado por e-mail`;case 'adiantou':return `Adiantou ${v.nome||''}: ${v.just}`;
+  case 'lote':return `Atualizado pelas ${v.obs||'telas do ClickUp'}${v.n?` (${v.n} ${plural(v.n,'mudança','mudanças')})`:''}`;
   case 'resp':return `Responsável de ${n(v.k)}: ${v.para?nomeDe(v.para):'a definir'}${v.de?' (antes '+nomeDe(v.de)+')':''}`;case 'origem':return `Origem alterada para ${v.origem==='existente'?'base existente':'do zero'}`;
   default:return v.t;}}
 function estHistHTML(pr){const ev=(ES(pr).eventos||[]).slice().reverse();if(!ev.length)return '';const rets=ev.filter(v=>v.t==='retorno');
@@ -2729,6 +2774,7 @@ document.addEventListener('click',async e=>{
     case 'fb-recusar':{if(!S.cap.fb)break;try{await S.cap.fb.recusar(b.dataset.u);toast('Pedido recusado.');}catch(er){toast(S.cap.fb.msg(er));}break;}
     case 'dados-exp':await exportarDados();break;
     case 'dados-imp':await importarDados();break;
+    case 'dados-lote':await aplicarLote();break;
     case 'dados-cancel':S.ui.dados={};render();break;
     case 'modal-off':case 'modal-bg':S.modal=null;S.ui.rmArm=null;render();break;
     case 'as-off':S.asId=null;try{sessionStorage.removeItem('voltra-as');}catch(e){}S.view=null;render();break;
