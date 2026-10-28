@@ -1894,7 +1894,7 @@ function prefInfo(pr,k){if(!ETK[k]||!ETK[k].pref)return null;const p=((ES(pr).es
 function podePassar(pr){const k=estAtual(pr);if(!k)return{ok:false,m:'Posicione o projeto na esteira primeiro.'};if(k==='fim')return{ok:false,m:'Projeto concluído.'};
   const t=estT(pr);const falta=itensDaEtapa(pr,k).filter(x=>!t.ef(x.id)).length;
   if(falta)return{ok:false,m:`${falta===1?'Falta':'Faltam'} ${falta} ${plural(falta,'item','itens')} nesta etapa.`};
-  const pf=prefInfo(pr,k);if(pf&&pf.st!=='ok')return{ok:false,m:'Falta registrar o OK da prefeitura.'};return{ok:true};}
+  const pf=prefInfo(pr,k);if(pf&&pf.st!=='ok')return{ok:false,pref:true,m:'Falta registrar o OK da prefeitura.'};return{ok:true};}
 const respDe=(pr,k)=>(ES(pr).resp||{})[k]||null;
 function lanesDe(pr){const t=estT(pr),tops=t.kids.get('e-complementares')||[];
   const L=LANES.map(l=>({...l,tops:tops.filter(c=>c.setor===l.s)}));
@@ -1996,6 +1996,13 @@ function itemRow(pr,x,opts){const t=estT(pr),d=t.depth.get(x.id)||0,cod=t.cod.ge
     ${podeNota&&!edN?`<button class="btn sm ghost nota-it" data-act="nota-on" data-p="${esc(pr.id)}" data-d="${esc(x.id)}" aria-label="${esc((x.nota&&x.nota.t?'Editar observação de ':'Escrever observação em ')+x.nome)}">${x.nota&&x.nota.t||(x.arqs&&x.arqs.length)?'Editar obs.':'Observação'}</button>`:''}${!lib?'<span class="lkic" aria-hidden="true">🔒</span>':''}</li>`;}
 function itensListHTML(pr,ids,opts){return ids.length?`<ul class="eit">${ids.map(x=>itemRow(pr,x,opts)).join('')}</ul>`:'<p class="muted">Nenhum item nesta etapa.</p>';}
 
+function prefFormHTML(pr,k){const t=estT(pr),pp=estAtual(pr)===k&&itensDaEtapa(pr,k).every(x=>t.ef(x.id)),nx=etIdx(k)+1<ETAPAS.length?ETAPAS[etIdx(k)+1].k:'fim',nxNome=nx==='fim'?'concluído':etNome(nx);
+  return `<form class="form pref-f" data-form="est-pref" data-p="${esc(pr.id)}" data-k="${k}"><div class="grid2"><label for="pf-dt">Data do OK<input id="pf-dt" type="date" max="${isoDate(Date.now())}" value="${esc(dv('pf-dt',isoDate(Date.now())))}"></label>
+        <label class="check" style="align-self:end"><input type="checkbox" id="pf-mail" ${dv('pf-mail',false)?'checked':''}> Já formalizado por e-mail</label></div>
+        <label for="pf-obs">Observação (opcional)<input id="pf-obs" value="${esc(dv('pf-obs',''))}" autocomplete="off" placeholder="Ex.: OK do secretário pelo WhatsApp"></label>
+        ${pp?`<label class="check"><input type="checkbox" id="pf-passar" ${dv('pf-passar',true)?'checked':''}> Passar para ${esc(nxNome)} ao salvar</label>`:''}<div class="row"><button class="btn primary sm" type="submit">${pp&&dv('pf-passar',true)?'Salvar OK e passar':'Salvar OK'}</button><button class="btn sm" type="button" data-act="est-pref-off">Cancelar</button></div></form>`;}
+function estBarraItens(pr,k){if(!podeGerirEst()){const v=podePassar(pr);return v.ok||v.pref?`<p class="hint">Itens desta etapa ticados. ${v.pref?'Falta o OK da prefeitura: a gestão registra e o projeto passa adiante.':'A gestão passa o projeto adiante.'}</p>`:'';}const v=podePassar(pr),pf=prefInfo(pr,k),nx=etIdx(k)+1<ETAPAS.length?ETAPAS[etIdx(k)+1].k:'fim';
+  return `<div class="row ep-act" style="margin:2px 0 8px">${pf&&pf.st!=='ok'&&!v.pref?`<button class="btn sm" data-act="est-pref-form" data-p="${esc(pr.id)}" data-k="${k}">Registrar OK da prefeitura</button>`:''}<button class="btn sm primary" data-act="est-passar" data-p="${esc(pr.id)}" ${v.ok||v.pref?'':'aria-disabled="true"'} title="${esc(v.ok?'':v.m)}">${v.pref?'Registrar OK da prefeitura e passar':k==='orgao'?'Aprovado pelo órgão: concluir':'Passar para '+esc(etNome(nx))} →</button>${etIdx(k)>0?`<button class="btn sm" data-act="est-devolver" data-p="${esc(pr.id)}">↩ Devolver (guindaste)</button>`:''}</div>${v.ok||v.pref?'':`<p class="hint">${esc(v.m)}</p>`}${S.ui.prefForm===pr.id+'|'+k?prefFormHTML(pr,k):''}`;}
 function estPanelHTML(pr,k){const t=estT(pr),e=ETK[k],st=estStatus(pr,k),g=podeGerirEst()&&!pr._preview,cur=estAtual(pr),lane=k==='complementares'?estLane(pr):null;
   let its=t.order.filter(x=>!x.etapa&&t.etp.get(x.id)===k);
   if(lane!=null){const ln=lanesDe(pr).find(l=>l.s===lane);its=ln?ln.tops.flatMap(x=>[x,...subarvore(pr,x.id)]):[];}
@@ -2007,19 +2014,16 @@ function estPanelHTML(pr,k){const t=estT(pr),e=ETK[k],st=estStatus(pr,k),g=podeG
   if(pf){const p=pf.p||{};h+=`<div class="pref-box s-${pf.st}"><strong>OK da prefeitura</strong>${pf.st==='ok'?`<span>${pf.implicito&&!p.okEm?'Etapa já passada':'Recebido'+(p.okData?' em '+fmtDate(p.okData):'')+(p.okPor?' · registrado por '+esc(first(nomeDe(p.okPor))):'')}${p.okEm&&!p.email?' · <b>falta formalizar por e-mail</b>':p.email?' · formalizado por e-mail':''}${p.obs?' · '+esc(p.obs):''}</span>`
       :pf.st==='wait'?`<span>Enviado ${fmtWhen(p.enviadoEm)} · aguardando há ${Math.max(0,Math.round((Date.now()-p.enviadoEm)/DAY))} ${plural(Math.max(0,Math.round((Date.now()-p.enviadoEm)/DAY)),'dia','dias')}</span>`:'<span>Esta etapa só passa com o OK da prefeitura. Envio pelo WhatsApp para agilizar, formalização sempre por e-mail.</span>'}
       ${g&&(st==='cur'||st==='done')?`<div class="row">${pf.st==='need'?`<button class="btn sm" data-act="est-pref-env" data-p="${esc(pr.id)}" data-k="${k}">Marcar como enviado</button>`:''}${pf.st!=='ok'||pf.implicito&&!p.okEm?`<button class="btn sm primary" data-act="est-pref-form" data-p="${esc(pr.id)}" data-k="${k}">Registrar OK da prefeitura</button>`:''}${p.okEm&&!p.email?`<button class="btn sm" data-act="est-pref-mail" data-p="${esc(pr.id)}" data-k="${k}">Formalizado por e-mail</button>`:''}</div>`:''}
-      ${S.ui.prefForm===pr.id+'|'+k?`<form class="form pref-f" data-form="est-pref" data-p="${esc(pr.id)}" data-k="${k}"><div class="grid2"><label for="pf-dt">Data do OK<input id="pf-dt" type="date" max="${isoDate(Date.now())}" value="${esc(dv('pf-dt',isoDate(Date.now())))}"></label>
-        <label class="check" style="align-self:end"><input type="checkbox" id="pf-mail" ${dv('pf-mail',false)?'checked':''}> Já formalizado por e-mail</label></div>
-        <label for="pf-obs">Observação (opcional)<input id="pf-obs" value="${esc(dv('pf-obs',''))}" autocomplete="off" placeholder="Ex.: OK do secretário pelo WhatsApp"></label>
-        <div class="row"><button class="btn primary sm" type="submit">Salvar OK</button><button class="btn sm" type="button" data-act="est-pref-off">Cancelar</button></div></form>`:''}</div>`;}
+      ${S.ui.prefForm===pr.id+'|'+k?prefFormHTML(pr,k):''}</div>`;}
   {const tv=travadasAtivas(pr).filter(m=>t.etp.get(m.disciplina)===k);if(tv.length&&g)h+=`<p class="note crit">${I.amp}<span>${tv.map(m=>esc(curto(nomeDe(m.pessoa)))).join(', ')} ${tv.length>1?'estão':'está'} com missão nesta etapa, que ainda está travada. Adiante a etapa com justificativa ou mova a missão.</span></p>`;}
   if(st==='lock')h+=`<p class="note">${I.amp}<span>Etapa travada: começa quando o projeto chegar aqui.${ES(pr).origem==='existente'?' Como o projeto tem base existente, a gestão pode adiantar com justificativa.':' Projeto do zero: trava rigorosa.'}</span></p>`;
   h+=itensListHTML(pr,its,{base:lane!=null?2:1});
   if(g){
     const btns=[];
-    if(st==='cur'){const nx=etIdx(k)+1<ETAPAS.length?ETAPAS[etIdx(k)+1].k:'fim';btns.push(`<button class="btn primary" data-act="est-passar" data-p="${esc(pr.id)}" ${v.ok?'':'aria-disabled="true"'} title="${esc(v.ok?'':v.m)}">${k==='orgao'?'Aprovado pelo órgão: concluir':'Passar para '+esc(etNome(nx))} →</button>`);
+    if(st==='cur'){const nx=etIdx(k)+1<ETAPAS.length?ETAPAS[etIdx(k)+1].k:'fim';btns.push(`<button class="btn primary" data-act="est-passar" data-p="${esc(pr.id)}" ${v.ok||v.pref?'':'aria-disabled="true"'} title="${esc(v.ok?'':v.m)}">${v.pref?'Registrar OK da prefeitura e passar':k==='orgao'?'Aprovado pelo órgão: concluir':'Passar para '+esc(etNome(nx))} →</button>`);
       if(etIdx(k)>0)btns.push(`<button class="btn" data-act="est-devolver" data-p="${esc(pr.id)}">↩ Devolver (guindaste)</button>`);}
     if((st==='lock'||st==='adi')&&ES(pr).origem==='existente')btns.push(`<button class="btn" data-act="est-adiantar" data-p="${esc(pr.id)}" data-k="${k}">Adiantar com justificativa</button>`);
-    if(btns.length)h+=`<div class="row ep-act">${btns.join('')}</div>${st==='cur'&&!v.ok?`<p class="hint">${esc(v.m)} Só a gestão passa adiante, quando tudo estiver ticado.</p>`:''}`;
+    if(btns.length)h+=`<div class="row ep-act">${btns.join('')}</div>${st==='cur'&&!v.ok?`<p class="hint">${v.pref?'Itens ticados. Falta só o OK da prefeitura: registre a data e o projeto passa para a próxima etapa.':esc(v.m)+' Só a gestão passa adiante, quando tudo estiver ticado.'}</p>`:''}`;
     h+=`<details class="fold" ${fo('ea-'+pr.id,false)} data-fold="ea-${esc(pr.id)}"><summary>Adicionar item nesta etapa</summary><div class="in"><form class="form" data-form="disc-add" data-p="${esc(pr.id)}" novalidate>
       <label for="nd-n-${esc(pr.id)}">Nome<input id="nd-n-${esc(pr.id)}" value="${esc(dv('nd-n-'+pr.id))}" autocomplete="off" placeholder="Ex.: Muro de arrimo"></label>
       <div class="grid2"><label for="nd-p-${esc(pr.id)}">Dentro de<select id="nd-p-${esc(pr.id)}"><option value="e-${k}">${etNum(k)} ${esc(e.n)}</option>${t.order.filter(x=>!x.etapa&&t.etp.get(x.id)===k).map(x=>`<option value="${esc(x.id)}" ${dv('nd-p-'+pr.id,'')===x.id?'selected':''}>${'· '.repeat(Math.max(0,(t.depth.get(x.id)||1)-1))}${esc(t.cod.get(x.id)+' '+x.nome)}</option>`).join('')}</select></label>
@@ -2100,7 +2104,7 @@ function estLiderHTML(pr){const m=me(),s=m&&m.setor,t=estT(pr),cor=E2L[s]||E2L['
 function estItensHTML(pr,setor){const t=estT(pr);
   return ETAPAS.map(e=>{let its=t.order.filter(x=>!x.etapa&&t.etp.get(x.id)===e.k);if(setor)its=its.filter(x=>x.setor===setor);if(setor&&!its.length)return '';
     const st=estStatus(pr,e.k),pf=prefInfo(pr,e.k);
-    return `<section class="est-sec s-${st}"><h4><span class="num mono">${etNum(e.k)}</span> ${esc(e.n)} ${st!=='none'?`<span class="chip s-${stChip(stVis(pr,e.k,st))} noi">${esc(ST_TXT[stVis(pr,e.k,st)])}</span>`:''}${pf?prefBadge(pf):''}</h4>${itensListHTML(pr,its,{})}</section>`;}).join('');}
+    return `<section class="est-sec s-${st}"><h4><span class="num mono">${etNum(e.k)}</span> ${esc(e.n)} ${st!=='none'?`<span class="chip s-${stChip(stVis(pr,e.k,st))} noi">${esc(ST_TXT[stVis(pr,e.k,st)])}</span>`:''}${pf?prefBadge(pf):''}</h4>${st==='cur'?estBarraItens(pr,e.k):''}${itensListHTML(pr,its,{})}</section>`;}).join('');}
 
 function obsProjHTML(pr,lider,m){const ed=S.ui.pobs===pr.id,real=S.projetos[pr.id];if(!real)return '';const notas=real.notasEq||{};
   const fmtN=n=>n&&n.t?`${esc(n.t).replace(/\n/g,'<br>')}<small class="nota-by">${esc(curto(nomeDe(n.por)))}, ${fmtWhen(n.em)}</small>`:'';
@@ -2343,7 +2347,7 @@ async function estPref(pid,k,tipo,f){await estUpd(pid,(pr,es)=>{es.est=es.est||{
   if(tipo==='env'){p.enviadoEm=now;p.enviadoPor=me0;evPush(es,{t:'pref_env',k});return{msg:'Marcado como enviado à prefeitura.'};}
   if(tipo==='ok'){p.okEm=now;p.okPor=me0;p.okData=f.data;p.email=!!f.email;p.obs=f.obs||null;if(!p.enviadoEm)p.enviadoEm=now;evPush(es,{t:'pref_ok',k,data:f.data,email:!!f.email,obs:f.obs||null});return{msg:'OK da prefeitura registrado.'};}
   if(tipo==='mail'){p.email=true;p.emailEm=now;evPush(es,{t:'pref_mail',k});return{msg:'Formalização por e-mail registrada.'};}
-  return false;});S.ui.prefForm=null;['pf-dt','pf-mail','pf-obs'].forEach(x=>delete S.drafts[x]);}
+  return false;});if(tipo==='ok'){S.ui.prefForm=null;['pf-dt','pf-mail','pf-obs'].forEach(x=>delete S.drafts[x]);}}
 async function estResp(pid,k,para){await estUpd(pid,(pr,es)=>{es.resp=es.resp||{};const de=es.resp[k]||null;if(de===(para||null))return false;es.resp[k]=para||null;evPush(es,{t:'resp',k,de,para:para||null});
   const av=para?[[para,`Você é o responsável pela etapa ${etNome(k)} de “${pr.nome}”.`]]:[];return{av,msg:`Responsável de ${etNome(k)}: ${para?first(nomeDe(para)):'a definir'}.`};});}
 async function estItem(pid,did){let info=null;const r=await estUpd(pid,(pr,es,ds)=>{const p=tmpPr(pr,es,ds),x=ds.find(d=>d.id===did);if(!x||!podeMarcar(p,x)){toast('Este item não pode ser marcado agora.');return false;}
@@ -2533,7 +2537,7 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.id)S.drafts[t.id]=t.type==='checkbox'?t.checked:t.value;
   if(t.id==='as-proj'){delete S.drafts['as-disc'];render();return;}
   if(t.id==='pj-fet'||t.id==='pf-cid'||t.id==='pf-sit'||t.id==='pa-mot'){render();return;}
-  if(t.id==='pe-papel'){render();return;}
+  if(t.id==='pe-papel'||t.id==='pf-passar'){render();return;}
   if(t.id==='as-retro'||t.id==='as-val'||t.id==='pj-retro'||(t.id&&(t.id.startsWith('hc-')||t.id.startsWith('at-')))){render();return;}
   if(t.id==='pj-s-all'){SECTORS.forEach(x=>{S.drafts['pj-s-'+x.id]=t.checked;});render();return;}
   if(t.id&&t.id.startsWith('pj-s-')){render();return;}
@@ -2577,7 +2581,8 @@ document.addEventListener('submit',async e=>{const f=e.target;if(!f.dataset||!f.
     const itens=pr?estT(pr).order.filter(x=>document.getElementById('er-i-'+x.id)&&val('er-i-'+x.id)).map(x=>x.id):[];
     await estDevolver(pid,dest,itens,mot,document.getElementById('er-pref')?val('er-pref'):false);S.modal=null;S.ui.estSel=S.ui.estSel||{};S.ui.estSel[pid]=dest;Object.keys(S.drafts).filter(x=>x.startsWith('er-')).forEach(x=>delete S.drafts[x]);render();return;}
   if(k==='est-adi'){const pid=f.dataset.p,just=val('ea-just');if(just.length<8){ferr(f,'Escreva a justificativa.');return;}await estAdiantar(pid,val('ea-no'),just);S.modal=null;['ea-no','ea-just'].forEach(x=>delete S.drafts[x]);render();return;}
-  if(k==='est-pref'){const d=val('pf-dt');if(!d){ferr(f,'Informe a data do OK.');return;}await estPref(f.dataset.p,f.dataset.k,'ok',{data:d,email:val('pf-mail'),obs:val('pf-obs')});return;}
+  if(k==='est-pref'){const d=val('pf-dt');if(!d){ferr(f,'Informe a data do OK.');return;}const passar=val('pf-passar')===true;delete S.drafts['pf-passar'];await estPref(f.dataset.p,f.dataset.k,'ok',{data:d,email:val('pf-mail'),obs:val('pf-obs')});
+    if(passar){S.ui.prefForm=null;S.ui.passArm=null;await estPassar(f.dataset.p);}return;}
   if(k==='resp-padrao'){const rp={};for(const e of ETAPAS)rp[e.k]=val('rp-'+e.k)||null;const ok=await act(async()=>{try{await D('config/geral').update({respPadrao:rp});}catch(er){if(er&&er.code==='invalid_argument'&&!S.config)await D('config/geral').set({respPadrao:rp});else throw er;}toast('Responsáveis padrão salvos.');});
     if(ok)Object.keys(S.drafts).filter(x=>x.startsWith('rp-')).forEach(x=>delete S.drafts[x]);return;}
   if(k==='projeto'){const nome=val('pj-nome');if(!nome){ferr(f,'Dê um nome ao projeto.');return;}
@@ -2755,7 +2760,11 @@ document.addEventListener('click',async e=>{
     case 'proj-foco':{const pr=S.projetos[b.dataset.id];if(!pr)break;await moverProj(pr.id,emFoco(pr)?'outros':'foco');break;}
     case 'est-view':try{localStorage.setItem('voltra-pview',b.dataset.v);}catch(er){}S.ui.pview=b.dataset.v;render();break;
     case 'est-item':{e.preventDefault();await estItem(b.dataset.p,b.dataset.d);break;}
-    case 'est-passar':{const pr=S.projetos[b.dataset.p];if(!pr)break;const v=podePassar(pr);if(!v.ok){toast(v.m);break;}const k=estAtual(pr);if(S.ui.passArm!==b.dataset.p+'|'+k){S.ui.passArm=b.dataset.p+'|'+k;b.textContent='Confirmar: passar adiante →';setTimeout(()=>{if(S.ui.passArm===b.dataset.p+'|'+k){S.ui.passArm=null;render();}},5000);break;}
+    case 'est-passar':{const pr=S.projetos[b.dataset.p];if(!pr)break;const v=podePassar(pr);
+      if(!v.ok&&v.pref&&podeGerirEst()){const k=estAtual(pr);S.ui.estSel=S.ui.estSel||{};S.ui.estSel[pr.id]=k;S.ui.prefForm=pr.id+'|'+k;S.drafts['pf-passar']=true;render();
+        const fm=document.querySelector('form[data-form="est-pref"]');if(fm){fm.scrollIntoView({behavior:reduce()?'auto':'smooth',block:'center'});const dt=fm.querySelector('#pf-dt');if(dt)dt.focus({preventScroll:true});}
+        toast('Esta etapa precisa do OK da prefeitura. Registre a data: ao salvar, o projeto já passa adiante.');break;}
+      if(!v.ok){toast(v.m);break;}const k=estAtual(pr);if(S.ui.passArm!==b.dataset.p+'|'+k){S.ui.passArm=b.dataset.p+'|'+k;b.textContent='Confirmar: passar adiante →';setTimeout(()=>{if(S.ui.passArm===b.dataset.p+'|'+k){S.ui.passArm=null;render();}},5000);break;}
       S.ui.passArm=null;await estPassar(b.dataset.p);S.ui.estSel=S.ui.estSel||{};delete S.ui.estSel[b.dataset.p];render();break;}
     case 'est-pref-env':await estPref(b.dataset.p,b.dataset.k,'env');break;
     case 'est-pref-mail':await estPref(b.dataset.p,b.dataset.k,'mail');break;
